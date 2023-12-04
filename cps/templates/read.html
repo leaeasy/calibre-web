@@ -103,9 +103,9 @@
           <label class="item">{{_('Font')}}:</label>
           <button type="button" id="default" onclick="selectFont(this.id)"><span>✓</span>{{_('Default')}}</button> 
           <button type="button" id="HeiTi" onclick="selectFont(this.id)"><span></span>{{_('HeiTi')}}</button>
-          <button type="button" id="SimSun" onclick="selectFont(this.id)"><span></span>{{_('SimSun')}}</button>
+          <button type="button" id="SongTi" onclick="selectFont(this.id)"><span></span>{{_('SongTi')}}</button>
           <button type="button" id="KaiTi" onclick="selectFont(this.id)"><span></span>{{_('KaiTi')}}</button>
-          <button type="button" id="Arial" onclick="selectFont(this.id)"><span></span>{{_('Arial')}}</button>
+          <button type="button" id="YuanTi" onclick="selectFont(this.id)"><span></span>{{_('YuanTi')}}</button>
         </div>
         <div class="layou" id="layout">
           <label class="item">{{ _('Spread') }}:</label>
@@ -164,6 +164,12 @@
     
     // custom font face
     let defaultFont;
+    const fontsMapping = {
+            "SongTi": "SimSun",
+            "KaiTi": "LXGW WenKai",
+            "HeiTi": "Hiragino Sans GB,Sarasa UI SC,HarmonyOS Sans SC",
+            "YuanTi": "XHei Intel"
+    };
 
     function selectFont(id) {
       if (!defaultFont) {
@@ -180,7 +186,8 @@
         reader.rendition.themes.font(defaultFont);
         return;
       }
-      reader.rendition.themes.font(id);
+      
+      reader.rendition.themes.font(fontsMapping[id]);
     }
 
     function spread(id) {
