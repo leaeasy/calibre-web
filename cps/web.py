@@ -1192,17 +1192,24 @@ def serve_book(book_id, book_format, anyname):
         if book_format.upper() == 'TXT':
             log.info('Serving book: %s', data.name)
             try:
-                rawdata = open(os.path.join(config.config_calibre_dir, book.path, data.name + "." + book_format),
+                rawdata = open(os.path.join(config.get_book_path(), book.path, data.name + "." + book_format),
                                "rb").read()
                 result = chardet.detect(rawdata)
-                return make_response(
-                    rawdata.decode(result['encoding'], 'surrogatepass').encode('utf-8', 'surrogatepass'))
+                try:
+                    text_data = rawdata.decode(result['encoding']).encode('utf-8')
+                except UnicodeDecodeError as e:
+                    log.error("Encoding error in text file {}: {}".format(book.id, e))
+                    if "surrogate" in e.reason:
+                        text_data = rawdata.decode(result['encoding'], 'surrogatepass').encode('utf-8', 'surrogatepass')
+                    else:
+                        text_data = rawdata.decode(result['encoding'], 'ignore').encode('utf-8', 'ignore')
+                return make_response(text_data)
             except FileNotFoundError:
                 log.error("File Not Found")
                 return "File Not Found"
         # enable byte range read of pdf
         response = make_response(
-            send_from_directory(os.path.join(config.config_calibre_dir, book.path), data.name + "." + book_format))
+            send_from_directory(os.path.join(config.get_book_path(), book.path), data.name + "." + book_format))
         if not range_header:
             log.info('Serving book: %s', data.name)
             response.headers['Accept-Ranges'] = 'bytes'
@@ -1226,7 +1233,7 @@ def send_to_ereader(book_id, book_format, convert):
         response = [{'type': "danger", 'message': _("Please configure the SMTP mail settings first...")}]
         return Response(json.dumps(response), mimetype='application/json')
     elif current_user.kindle_mail:
-        result = send_mail(book_id, book_format, convert, current_user.kindle_mail, config.config_calibre_dir,
+        result = send_mail(book_id, book_format, convert, current_user.kindle_mail, config.get_book_path(),
                            current_user.name)
         if result is None:
             ub.update_download(book_id, int(current_user.id))
@@ -1347,21 +1354,21 @@ def login():
 @limiter.limit("3/minute", key_func=lambda: request.form.get('username', "").strip().lower())
 def login_post():
     form = request.form.to_dict()
+    username = form.get('username', "").strip().lower().replace("\n","").replace("\r","")
     try:
         limiter.check()
     except RateLimitExceeded:
         flash(_(u"Please wait one minute before next login"), category="error")
-        return render_login(form.get("username", ""), form.get("password", ""))
+        return render_login(username, form.get("password", ""))
     if current_user is not None and current_user.is_authenticated:
         return redirect(url_for('web.index'))
     if config.config_login_type == constants.LOGIN_LDAP and not services.ldap:
         log.error(u"Cannot activate LDAP authentication")
         flash(_(u"Cannot activate LDAP authentication"), category="error")
-    user = ub.session.query(ub.User).filter(func.lower(ub.User.name) == form.get('username', "").strip().lower()) \
-        .first()
+    user = ub.session.query(ub.User).filter(func.lower(ub.User.name) == username).first()
     remember_me = bool(form.get('remember_me'))
     if config.config_login_type == constants.LOGIN_LDAP and services.ldap and user and form['password'] != "":
-        login_result, error = services.ldap.bind_user(form['username'], form['password'])
+        login_result, error = services.ldap.bind_user(username, form['password'])
         if login_result:
             log.debug(u"You are now logged in as: '{}'".format(user.name))
             return handle_login_user(user,
@@ -1381,7 +1388,7 @@ def login_post():
             flash(_(u"Could not login: %(message)s", message=error), category="error")
         else:
             ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
-            log.warning('LDAP Login failed for user "%s" IP-address: %s', form['username'], ip_address)
+            log.warning('LDAP Login failed for user "%s" IP-address: %s', username, ip_address)
             flash(_(u"Wrong Username or Password"), category="error")
     else:
         ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
@@ -1390,7 +1397,7 @@ def login_post():
                 ret, __ = reset_password(user.id)
                 if ret == 1:
                     flash(_(u"New Password was send to your email address"), category="info")
-                    log.info('Password reset for user "%s" IP-address: %s', form['username'], ip_address)
+                    log.info('Password reset for user "%s" IP-address: %s', username, ip_address)
                 else:
                     log.error(u"An unknown error occurred. Please try again later")
                     flash(_(u"An unknown error occurred. Please try again later."), category="error")
@@ -1406,9 +1413,9 @@ def login_post():
                                          _(u"You are now logged in as: '%(nickname)s'", nickname=user.name),
                                          "success")
             else:
-                log.warning('Login failed for user "{}" IP-address: {}'.format(form['username'], ip_address))
+                log.warning('Login failed for user "{}" IP-address: {}'.format(username, ip_address))
                 flash(_(u"Wrong Username or Password"), category="error")
-    return render_login(form.get("username", ""), form.get("password", ""))
+    return render_login(username, form.get("password", ""))
 
 
 @web.route('/logout')

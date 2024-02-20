@@ -137,10 +137,13 @@ def convert_to_kobo_timestamp_string(timestamp):
 
 @kobo.route("/v1/library/sync")
 @requires_kobo_auth
-@download_required
+# @download_required
 def HandleSyncRequest():
+    if not current_user.role_download():
+        log.info("Users need download permissions for syncing library to Kobo reader")
+        return abort(403)
     sync_token = SyncToken.SyncToken.from_headers(request.headers)
-    log.info("Kobo library sync request received.")
+    log.info("Kobo library sync request received")
     log.debug("SyncToken: {}".format(sync_token))
     log.debug("Download link format {}".format(get_download_url_for_book('[bookid]','[bookformat]')))
     if not current_app.wsgi_app.is_proxied:
@@ -205,7 +208,7 @@ def HandleSyncRequest():
     for book in books:
         formats = [data.format for data in book.Books.data]
         if 'KEPUB' not in formats and config.config_kepubifypath and 'EPUB' in formats:
-            helper.convert_book_format(book.Books.id, config.config_calibre_dir, 'EPUB', 'KEPUB', current_user.name)
+            helper.convert_book_format(book.Books.id, config.get_book_path(), 'EPUB', 'KEPUB', current_user.name)
 
         kobo_reading_state = get_or_create_reading_state(book.Books.id)
         entitlement = {
